@@ -13,7 +13,7 @@ public class Titular {
     private String titulo;
     
     public Titular(){
-        this.titulo = new String("");
+        this.titulo = "";
     }
     public Titular(String _titulo){
         this.titulo = _titulo;

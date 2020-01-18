@@ -18,23 +18,25 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
+import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import static tenda.Gestor.con;
 
 /**
  *
  * @author Hemihundias
  */
 public class Conector {
+    Scanner teclado = new Scanner(System.in);
     String url = "C:\\sqlite\\tenda.db";
     Connection connect;
-    
-    private List<Tienda> tienda;
-    
+        
     public void connect(){
         try {
             connect = DriverManager.getConnection("jdbc:SQLite:"+url);
             if (connect!=null) {
+                //PRAGMA foreign_keys = ON;
                 System.out.println("Conectado");
             }
         }catch (SQLException ex) {
@@ -51,7 +53,7 @@ public class Conector {
     
     public void crearBaseDatos(){               
         String sql = "CREATE TABLE IF NOT EXISTS provincias (\n"
-                + "    id INTEGER NOT NULL,\n"
+                + "    id INTEGER NOT NULL PRIMARY KEY,\n"
                 + "    nombre VARCHAR NOT NULL\n"                
                 + ");";
         
@@ -71,8 +73,8 @@ public class Conector {
                 + ");";
         
         String sql3 = "CREATE TABLE IF NOT EXISTS existencias (\n"
-                + "    id_tienda VARCHAR NOT NULL,\n"
-                + "    id_producto VARCHAR NOT NULL,\n"
+                + "    id_tienda INTEGER NOT NULL,\n"
+                + "    id_producto INTEGER NOT NULL,\n"
                 + "    stock INTEGER NULL,\n"
                 + "    PRIMARY KEY(id_tienda, id_producto),\n"
                 + "    foreign key(id_tienda) references tiendas(id),\n"
@@ -86,8 +88,8 @@ public class Conector {
                 + ");";
         
         String sql5 = "CREATE TABLE IF NOT EXISTS horas (\n"
-                + "    id_tienda VARCHAR NOT NULL,\n"
-                + "    id_empleados VARCHAR NOT NULL,\n"
+                + "    id_tienda INTEGER NOT NULL,\n"
+                + "    id_empleados INTEGER NOT NULL,\n"
                 + "    horas INTEGER NULL,\n"
                 + "    PRIMARY KEY(id_tienda, id_empleados),\n"
                 + "    foreign key(id_tienda) references tiendas(id),\n"
@@ -151,7 +153,7 @@ public class Conector {
     }     
     
     public void insertarProvincias(int id, String nombre){
-        String sql = "INSERT INTO provincias (id, nombre) values (?,?)";
+        String sql = "INSERT OR IGNORE INTO provincias (id, nombre) values (?,?)";
         
         try {
             PreparedStatement st = connect.prepareStatement(sql);
@@ -165,23 +167,299 @@ public class Conector {
     }
     
     public void insertarTienda(){
-        String sql = "INSERT INTO tiendas (nombre, id_provincia, ciudad) values (?,?)";
-        String sql1 = "SELECT id FROM PROFF WHERE nombre=";
-        try{
+        boolean x = true;
+        int id_provincia = 0;
+        String nombre,provincia,ciudad;
+        System.out.println("Teclee nombre de la nueva tienda:");
+        nombre = teclado.next();
+                    
+        System.out.println("Teclee la provincia de emplazamiento de la tienda:");                    
+        while(x){
+            provincia = teclado.next();
+            String sql = "SELECT * FROM provincias WHERE nombre='"+ provincia +"'";
             
-            for(int i=0; i<tienda.size();i++){
+            try {
                 Statement stmt = connect.createStatement();
-                ResultSet rs =  stmt.executeQuery(sql1+tienda.get(i).getCidade());
-                PreparedStatement st = connect.prepareStatement(sql);
-                st.setString(1, tienda.get(i).getNome());
-                st.setString(2, rs.toString());
-                st.setString(3, tienda.get(i).getCidade());
-            }
+                ResultSet rs = stmt.executeQuery(sql);
+                rs.next();
+                if(provincia.equalsIgnoreCase(rs.getString(2))){
+                    x= false;
+                    id_provincia = rs.getInt(1);
+                }else{
+                    System.out.println("Valor incorrecto. Teclee la provincia de emplazamiento de la tienda:");
+                }               
                 
+            } catch (SQLException ex) {
+                System.err.println(ex.getMessage());
+            }                        
+        }
+                    
+        System.out.println("Teclee la ciudad de emplazamiento de la tienda:");
+        ciudad = teclado.next();   
+        
+        String sql = "INSERT INTO tiendas (nombre, id_provincia, ciudad) values (?,?,?)";
+        try{                     
+            PreparedStatement st = connect.prepareStatement(sql);
+            st.setString(1, nombre);
+            st.setInt(2, id_provincia);
+            st.setString(3, ciudad);  
+            st.execute();
         } catch (SQLException ex){
             System.err.println(ex.getMessage());
+        }                
+    }
+    
+    public void mostrarTiendas(){
+        String sql = "SELECT t.id,t.nombre,p.nombre,t.ciudad FROM tiendas t INNER JOIN provincias p ON t.id_provincia = p.id";
+        ResultSet rs = null;
+        try{
+            Statement st = connect.createStatement();              
+            rs = st.executeQuery(sql);
+            System.out.println("\nid\tnombre\tprovincia\tciudad");
+            while(rs.next()){
+                System.out.println("\n" + rs.getInt(1) + "\t" +
+                        rs.getString(2) + "\t" +
+                        rs.getString(3) + "\t" +
+                        rs.getString(4));
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }        
+    }
+    
+    public void eliminarTienda(){
+        mostrarTiendas();
+        System.out.println("Teclee el número id de la tienda que quiere eliminar.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
         }
+        int ide = teclado.nextInt();
+        
+        String sql = "DELETE FROM tiendas WHERE id = '" + ide + "'";
+        try{
+            PreparedStatement stm = connect.prepareStatement(sql);
+            stm.execute();
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }
+    }
+    
+    public void insertarProducto(){
+        String nombre,descripcion;
+        Double precio;
                 
+        System.out.println("Teclee nombre del nuevo producto:");
+        nombre = teclado.nextLine();
+        
+        System.out.println("Teclee una descripción del producto:");
+        descripcion = teclado.nextLine();
+                            
+        System.out.println("Teclee el precio del producto:");
+        while(!teclado.hasNextDouble()){
+            System.out.println("Valor incorrecto, intentelo de nuevo.");
+        }
+        precio = teclado.nextDouble();
+        
+        String sql = "INSERT INTO productos (nombre, descripcion, precio) values (?,?,?)";
+        try{                     
+            PreparedStatement st = connect.prepareStatement(sql);
+            st.setString(1, nombre);
+            st.setString(2, descripcion);
+            st.setDouble(3, precio);  
+            st.execute();
+        } catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }                
+        teclado.nextLine();
+    }
+    
+    public void mostrarProductos(){
+        String sql = "SELECT * FROM productos";
+        ResultSet rs = null;
+        try{
+            Statement st = connect.createStatement();              
+            rs = st.executeQuery(sql);
+            System.out.println("\nid\tnombre\tdescripcion\tprecio");
+            while(rs.next()){
+                System.out.println("\n" + rs.getInt(1) + "\t" +
+                        rs.getString(2) + "\t" +
+                        rs.getString(3) + "\t" +
+                        rs.getDouble(4));
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }        
+    }
+    
+    public void insertarProductoTienda(){
+        int ide,in,ine;
+                
+        con.mostrarTiendas();
+        System.out.println("Introduzca el número id de la tienda a la que se añadira el producto.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        ide = teclado.nextInt();
+                    
+        con.mostrarProductos();
+        System.out.println("Introduzca el número id del producto que quiere añadir a la tienda.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        in = teclado.nextInt();
+        
+        System.out.println("Introduzca el stock del producto.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        ine = teclado.nextInt();
+        
+        String sql = "INSERT INTO existencias (id_tienda, id_producto, stock) values (?,?,?)";
+        try{                     
+            PreparedStatement st = connect.prepareStatement(sql);
+            st.setInt(1, ide);
+            st.setInt(2, in);
+            st.setInt(3, ine);  
+            st.execute();
+        } catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }                
+    }
+    
+    public void mostrarExistenciasTienda(){
+        String sql = "SELECT id_tienda,t.nombre,p.nombre,stock FROM existencias e INNER JOIN tiendas t ON t.id = e.id_tienda INNER JOIN productos p ON p.id = e.id_producto";
+        ResultSet rs = null;
+        try{
+            Statement st = connect.createStatement();              
+            rs = st.executeQuery(sql);
+            System.out.println("\nid\ttienda\tproducto\tstock");
+            while(rs.next()){
+                System.out.println("\n" + rs.getString(1) + "\t" +
+                        rs.getString(2) + "\t" +
+                        rs.getString(3) + "\t" +
+                        rs.getInt(4));
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }        
+    }
+    
+    public void insertarEmpleado(){
+        String nombre,apellidos;
+                        
+        System.out.println("Teclee nombre del nuevo empleado:");
+        nombre = teclado.nextLine();
+        
+        System.out.println("Teclee apellidos:");
+        apellidos = teclado.nextLine();                           
+                
+        String sql = "INSERT INTO empleados (nombre, apellidos) values (?,?)";
+        try{                     
+            PreparedStatement st = connect.prepareStatement(sql);
+            st.setString(1, nombre);
+            st.setString(2, apellidos);
+            st.execute();
+        } catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }    
+        teclado.nextLine();
+    }
+    
+    public void mostrarEmpleados(){
+        String sql = "SELECT * FROM empleados";
+        ResultSet rs = null;
+        try{
+            Statement st = connect.createStatement();              
+            rs = st.executeQuery(sql);
+            System.out.println("\nid\tnombre\tapellidos");
+            while(rs.next()){
+                System.out.println("\n" + rs.getInt(1) + "\t" +
+                        rs.getString(2) + "\t" +
+                        rs.getString(3));
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }
+    }
+    
+    public void insertarCliente(){
+        String nombre,apellidos, email;
+                        
+        System.out.println("Teclee nombre del nuevo cliente:");
+        nombre = teclado.nextLine();
+        
+        System.out.println("Teclee apellidos:");
+        apellidos = teclado.nextLine();    
+        
+        System.out.println("Teclee mail:");
+        email = teclado.nextLine(); 
+                
+        String sql = "INSERT INTO clientes (nombre, apellidos, email) values (?,?,?)";
+        try{                     
+            PreparedStatement st = connect.prepareStatement(sql);
+            st.setString(1, nombre);
+            st.setString(2, apellidos);
+            st.setString(3, email);
+            st.execute();
+        } catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        } 
+        
+    }
+    
+    public void mostrarClientes(){
+        String sql = "SELECT * FROM clientes";
+        ResultSet rs = null;
+        try{
+            Statement st = connect.createStatement();              
+            rs = st.executeQuery(sql);
+            System.out.println("\nid\tnombre\tapellidos\tmail");
+            while(rs.next()){
+                System.out.println("\n" + rs.getInt(1) + "\t" +
+                        rs.getString(2) + "\t" +
+                        rs.getString(3) + "\t" +
+                        rs.getString(4));
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }
+    }
+    
+    public void registrarHoras(){
+        int ide,in,ine;
+                
+        con.mostrarEmpleados();
+                    
+        System.out.println("Introduzca el id del empleado al que se le van a registrar las horas.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        in = teclado.nextInt();
+
+        con.mostrarTiendas();
+
+        System.out.println("Introduzca el id de la tienda a la que se van a computar las horas.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        ide = teclado.nextInt();
+
+        System.out.println("Introduzca el número de horas a registrar.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        ine = teclado.nextInt();
+        
+        String sql = "INSERT INTO horas (id_tienda, id_empleado, horas) values (?,?,?)";
+        try{                     
+            PreparedStatement st = connect.prepareStatement(sql);
+            st.setInt(1, in);
+            st.setInt(2, ide);
+            st.setInt(3, ine);  
+            st.execute();
+        } catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }                
     }
         
 }
