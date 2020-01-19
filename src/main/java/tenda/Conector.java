@@ -17,32 +17,50 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.List;
+import java.util.ArrayList;
+import java.util.Properties;
 import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import static tenda.Gestor.con;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+import org.xml.sax.XMLReader;
+import org.xml.sax.helpers.XMLReaderFactory;
 
 /**
  *
  * @author Hemihundias
  */
 public class Conector {
+    private int in,ide,i,id_provincia;
+    private String sql,sql1,sql2,sql3,sql4,sql5,sql6,nombre,apellidos, email,descripcion,provincia,ciudad;
+    private ResultSet rs;
+    private Double precio;
+    private boolean x = true;
+    private File datos;
+    private Properties propiedadesConex;
+    private Statement stm;
+    private PreparedStatement pst;
+    private Connection connect;
+    
     Scanner teclado = new Scanner(System.in);
-    String url = "C:\\sqlite\\tenda.db";
-    Connection connect;
-        
+    String url = "tenda.db";
+    
+    //Método para la creación de la conexión a la base de datos,de no existir esta, la crea.
     public void connect(){
         try {
-            connect = DriverManager.getConnection("jdbc:SQLite:"+url);
+            propiedadesConex=new Properties();
+            propiedadesConex.setProperty("foreign_keys", "true");      
+            connect = DriverManager.getConnection("jdbc:SQLite:"+url,propiedadesConex);
             if (connect!=null) {
-                //PRAGMA foreign_keys = ON;
                 System.out.println("Conectado");
             }
         }catch (SQLException ex) {
             System.err.println("No se ha podido conectar a la base de datos\n"+ex.getMessage());
         }
     }
+    
+    //Método para el cierre de la conexión a la bd
     public void close(){
             try {
                 connect.close();
@@ -51,13 +69,14 @@ public class Conector {
             }
     }
     
+    //Método por el cual creamos, de no existir, la estructura de nuestra base de datos
     public void crearBaseDatos(){               
-        String sql = "CREATE TABLE IF NOT EXISTS provincias (\n"
+        sql = "CREATE TABLE IF NOT EXISTS provincias (\n"
                 + "    id INTEGER NOT NULL PRIMARY KEY,\n"
                 + "    nombre VARCHAR NOT NULL\n"                
                 + ");";
         
-        String sql1 = "CREATE TABLE IF NOT EXISTS tiendas (\n"
+        sql1 = "CREATE TABLE IF NOT EXISTS tiendas (\n"
                 + "    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n"
                 + "    nombre VARCHAR NOT NULL,\n"
                 + "    id_provincia VARCHAR NOT NULL,\n"
@@ -65,14 +84,14 @@ public class Conector {
                 + "    foreign key(id_provincia) references provincias(id)\n"
                 + ");";
                         
-        String sql2 = "CREATE TABLE IF NOT EXISTS productos (\n"
+        sql2 = "CREATE TABLE IF NOT EXISTS productos (\n"
                 + "    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n"
                 + "    nombre VARCHAR NOT NULL,\n"
                 + "    descripcion VARCHAR NOT NULL,\n"
                 + "    precio REAL NOT NULL\n"
                 + ");";
         
-        String sql3 = "CREATE TABLE IF NOT EXISTS existencias (\n"
+        sql3 = "CREATE TABLE IF NOT EXISTS existencias (\n"
                 + "    id_tienda INTEGER NOT NULL,\n"
                 + "    id_producto INTEGER NOT NULL,\n"
                 + "    stock INTEGER NULL,\n"
@@ -81,13 +100,13 @@ public class Conector {
                 + "    foreign key(id_producto) references productos(id)\n"
                 + ");";
         
-        String sql4 = "CREATE TABLE IF NOT EXISTS empleados (\n"
+        sql4 = "CREATE TABLE IF NOT EXISTS empleados (\n"
                 + "    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n"
                 + "    nombre VARCHAR NOT NULL,\n"
                 + "    apellidos VARCHAR NOT NULL\n"
                 + ");";
         
-        String sql5 = "CREATE TABLE IF NOT EXISTS horas (\n"
+        sql5 = "CREATE TABLE IF NOT EXISTS horas (\n"
                 + "    id_tienda INTEGER NOT NULL,\n"
                 + "    id_empleados INTEGER NOT NULL,\n"
                 + "    horas INTEGER NULL,\n"
@@ -96,7 +115,7 @@ public class Conector {
                 + "    foreign key(id_empleados) references empleados(id)\n"
                 + ");";
         
-        String sql6 = "CREATE TABLE IF NOT EXISTS clientes (\n"
+        sql6 = "CREATE TABLE IF NOT EXISTS clientes (\n"
                 + "    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n"
                 + "    nombre VARCHAR NOT NULL,\n"
                 + "    apellidos VARCHAR NOT NULL,\n"
@@ -117,13 +136,12 @@ public class Conector {
         }
     }
     
+    //Mediante este método sacamos la información de las provincias contenida en el json, la pasamos a la clase Provincias, y posteriormente a la bd mediante el método insertarProvincias
     public void cargarProvincias() {
-        File datos = new File("provincias.json");
+        datos = new File("provincias.json");
         if(datos.exists()){
             try{     
-                FileReader fluxoDatos;
-                fluxoDatos = new FileReader(datos);
-                
+                FileReader fluxoDatos = new FileReader(datos);                
                 BufferedReader buferEntrada = new BufferedReader(fluxoDatos);
                 
                 StringBuilder jsonBuilder = new StringBuilder();
@@ -147,48 +165,43 @@ public class Conector {
             }
         }else{
             System.out.println("Imposible actualizar datos de las provincias.");
-        }     
-             
-       
+        }         
     }     
     
+    //Método mediante el que insertaremos los datos de las provincias en la bd
     public void insertarProvincias(int id, String nombre){
-        String sql = "INSERT OR IGNORE INTO provincias (id, nombre) values (?,?)";
+        sql = "INSERT OR IGNORE INTO provincias (id, nombre) values (?,?)";
         
         try {
-            PreparedStatement st = connect.prepareStatement(sql);
-            st.setInt(1, id);
-            st.setString(2, nombre);
-            st.execute();
+            pst = connect.prepareStatement(sql);
+            pst.setInt(1, id);
+            pst.setString(2, nombre);
+            pst.execute();
         } catch (SQLException ex) {
             System.err.println(ex.getMessage());
         }
-
     }
     
-    public void insertarTienda(){
-        boolean x = true;
-        int id_provincia = 0;
-        String nombre,provincia,ciudad;
+    //Método para la creación de una nueva Tienda en la bd
+    public void insertarTienda(){                
         System.out.println("Teclee nombre de la nueva tienda:");
         nombre = teclado.next();
                     
         System.out.println("Teclee la provincia de emplazamiento de la tienda:");                    
         while(x){
             provincia = teclado.next();
-            String sql = "SELECT * FROM provincias WHERE nombre='"+ provincia +"'";
+            sql = "SELECT * FROM provincias WHERE nombre='"+ provincia +"'";
             
             try {
-                Statement stmt = connect.createStatement();
-                ResultSet rs = stmt.executeQuery(sql);
+                stm = connect.createStatement();
+                rs = stm.executeQuery(sql);
                 rs.next();
                 if(provincia.equalsIgnoreCase(rs.getString(2))){
                     x= false;
                     id_provincia = rs.getInt(1);
                 }else{
                     System.out.println("Valor incorrecto. Teclee la provincia de emplazamiento de la tienda:");
-                }               
-                
+                }  
             } catch (SQLException ex) {
                 System.err.println(ex.getMessage());
             }                        
@@ -197,57 +210,56 @@ public class Conector {
         System.out.println("Teclee la ciudad de emplazamiento de la tienda:");
         ciudad = teclado.next();   
         
-        String sql = "INSERT INTO tiendas (nombre, id_provincia, ciudad) values (?,?,?)";
+        sql = "INSERT INTO tiendas (nombre, id_provincia, ciudad) values (?,?,?)";
         try{                     
-            PreparedStatement st = connect.prepareStatement(sql);
-            st.setString(1, nombre);
-            st.setInt(2, id_provincia);
-            st.setString(3, ciudad);  
-            st.execute();
+            pst = connect.prepareStatement(sql);
+            pst.setString(1, nombre);
+            pst.setInt(2, id_provincia);
+            pst.setString(3, ciudad);  
+            pst.execute();
+            System.out.println("Tienda creada...");
         } catch (SQLException ex){
             System.err.println(ex.getMessage());
         }                
     }
     
+    //Método que nos devuelve todas las tiendas dadas de alta en la bd
     public void mostrarTiendas(){
-        String sql = "SELECT t.id,t.nombre,p.nombre,t.ciudad FROM tiendas t INNER JOIN provincias p ON t.id_provincia = p.id";
-        ResultSet rs = null;
+        sql = "SELECT t.id,t.nombre,p.nombre,t.ciudad FROM tiendas t INNER JOIN provincias p ON t.id_provincia = p.id";
+        rs = null;
         try{
-            Statement st = connect.createStatement();              
-            rs = st.executeQuery(sql);
-            System.out.println("\nid\tnombre\tprovincia\tciudad");
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            System.out.printf("%-20s%-20s%-20s%-20s\n","id","Nombre","Provincia","Ciudad");
             while(rs.next()){
-                System.out.println("\n" + rs.getInt(1) + "\t" +
-                        rs.getString(2) + "\t" +
-                        rs.getString(3) + "\t" +
-                        rs.getString(4));
+                System.out.printf("%-20s%-20s%-20s%-20s\n",rs.getInt(1),rs.getString(2),rs.getString(3),rs.getString(4));
             }
         }catch (SQLException ex){
             System.err.println(ex.getMessage());
         }        
     }
     
+    //Método que nos permite eliminar una tienda
     public void eliminarTienda(){
         mostrarTiendas();
         System.out.println("Teclee el número id de la tienda que quiere eliminar.");
         while(!teclado.hasNextInt()){
             System.out.println("Valor incorrecto, vuelva a intentarlo.");
         }
-        int ide = teclado.nextInt();
+        ide = teclado.nextInt();
         
-        String sql = "DELETE FROM tiendas WHERE id = '" + ide + "'";
+        sql = "DELETE FROM tiendas WHERE id = '" + ide + "'";
         try{
-            PreparedStatement stm = connect.prepareStatement(sql);
-            stm.execute();
+            pst = connect.prepareStatement(sql);
+            pst.execute();
+            System.out.println("Tienda eliminada...");
         }catch (SQLException ex){
             System.err.println(ex.getMessage());
         }
     }
     
-    public void insertarProducto(){
-        String nombre,descripcion;
-        Double precio;
-                
+    //Método para dar de alta un nuevo producto
+    public void insertarProducto(){                        
         System.out.println("Teclee nombre del nuevo producto:");
         nombre = teclado.nextLine();
         
@@ -260,48 +272,46 @@ public class Conector {
         }
         precio = teclado.nextDouble();
         
-        String sql = "INSERT INTO productos (nombre, descripcion, precio) values (?,?,?)";
+        sql = "INSERT INTO productos (nombre, descripcion, precio) values (?,?,?)";
         try{                     
-            PreparedStatement st = connect.prepareStatement(sql);
-            st.setString(1, nombre);
-            st.setString(2, descripcion);
-            st.setDouble(3, precio);  
-            st.execute();
+            pst = connect.prepareStatement(sql);
+            pst.setString(1, nombre);
+            pst.setString(2, descripcion);
+            pst.setDouble(3, precio);  
+            pst.execute();
+            System.out.println("Producto creado...");
         } catch (SQLException ex){
             System.err.println(ex.getMessage());
         }                
         teclado.nextLine();
     }
     
+    //Método que nos devuelve todos los productos dados de alta
     public void mostrarProductos(){
-        String sql = "SELECT * FROM productos";
-        ResultSet rs = null;
+        sql = "SELECT * FROM productos";
+        rs = null;
         try{
-            Statement st = connect.createStatement();              
-            rs = st.executeQuery(sql);
-            System.out.println("\nid\tnombre\tdescripcion\tprecio");
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            System.out.printf("%-20s%-20s%-20s%-20s\n","id","Nombre","Descripción","Precio");
             while(rs.next()){
-                System.out.println("\n" + rs.getInt(1) + "\t" +
-                        rs.getString(2) + "\t" +
-                        rs.getString(3) + "\t" +
-                        rs.getDouble(4));
+                System.out.printf("%-20s%-20s%-20s%-20s\n",rs.getInt(1),rs.getString(2),rs.getString(3),rs.getDouble(4));
             }
         }catch (SQLException ex){
             System.err.println(ex.getMessage());
         }        
     }
     
-    public void insertarProductoTienda(){
-        int ide,in,ine;
-                
-        con.mostrarTiendas();
+    //Método para dar de alta un producto en una tienda
+    public void insertarProductoTienda(){             
+        mostrarTiendas();
         System.out.println("Introduzca el número id de la tienda a la que se añadira el producto.");
         while(!teclado.hasNextInt()){
             System.out.println("Valor incorrecto, vuelva a intentarlo.");
         }
         ide = teclado.nextInt();
                     
-        con.mostrarProductos();
+        mostrarProductos();
         System.out.println("Introduzca el número id del producto que quiere añadir a la tienda.");
         while(!teclado.hasNextInt()){
             System.out.println("Valor incorrecto, vuelva a intentarlo.");
@@ -312,79 +322,77 @@ public class Conector {
         while(!teclado.hasNextInt()){
             System.out.println("Valor incorrecto, vuelva a intentarlo.");
         }
-        ine = teclado.nextInt();
+        i = teclado.nextInt();
         
-        String sql = "INSERT INTO existencias (id_tienda, id_producto, stock) values (?,?,?)";
+        sql = "INSERT INTO existencias (id_tienda, id_producto, stock) values (?,?,?)";
         try{                     
-            PreparedStatement st = connect.prepareStatement(sql);
-            st.setInt(1, ide);
-            st.setInt(2, in);
-            st.setInt(3, ine);  
-            st.execute();
+            pst = connect.prepareStatement(sql);
+            pst.setInt(1, ide);
+            pst.setInt(2, in);
+            pst.setInt(3, i);  
+            pst.execute();
+            
+            System.out.println("Producto añadido...");
         } catch (SQLException ex){
             System.err.println(ex.getMessage());
         }                
     }
     
+    //Método que nos devuelve la cantidad de cada producto que posee una tienda en concreto
     public void mostrarExistenciasTienda(){
-        String sql = "SELECT id_tienda,t.nombre,p.nombre,stock FROM existencias e INNER JOIN tiendas t ON t.id = e.id_tienda INNER JOIN productos p ON p.id = e.id_producto";
-        ResultSet rs = null;
+        sql = "SELECT id_tienda,t.nombre,p.nombre,stock FROM existencias e INNER JOIN tiendas t ON t.id = e.id_tienda INNER JOIN productos p ON p.id = e.id_producto";
+        rs = null;
         try{
-            Statement st = connect.createStatement();              
-            rs = st.executeQuery(sql);
-            System.out.println("\nid\ttienda\tproducto\tstock");
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            System.out.printf("%-20s%-20s%-20s%-20s\n","id","Tiendas","Producto","Stock");
             while(rs.next()){
-                System.out.println("\n" + rs.getString(1) + "\t" +
-                        rs.getString(2) + "\t" +
-                        rs.getString(3) + "\t" +
-                        rs.getInt(4));
+                System.out.printf("%-20s%-20s%-20s%-20s\n",rs.getInt(1),rs.getString(2),rs.getString(3),rs.getInt(4));
             }
         }catch (SQLException ex){
             System.err.println(ex.getMessage());
         }        
     }
     
-    public void insertarEmpleado(){
-        String nombre,apellidos;
-                        
+    //Método que nos permite dar de alta un nuevo empleado
+    public void insertarEmpleado(){                                
         System.out.println("Teclee nombre del nuevo empleado:");
         nombre = teclado.nextLine();
         
         System.out.println("Teclee apellidos:");
         apellidos = teclado.nextLine();                           
                 
-        String sql = "INSERT INTO empleados (nombre, apellidos) values (?,?)";
+        sql = "INSERT INTO empleados (nombre, apellidos) values (?,?)";
         try{                     
-            PreparedStatement st = connect.prepareStatement(sql);
-            st.setString(1, nombre);
-            st.setString(2, apellidos);
-            st.execute();
+            pst = connect.prepareStatement(sql);
+            pst.setString(1, nombre);
+            pst.setString(2, apellidos);
+            pst.execute();
+            System.out.println("Empleado dado de alta...");
         } catch (SQLException ex){
             System.err.println(ex.getMessage());
         }    
         teclado.nextLine();
     }
     
+    //Método que nos devuelve todos los empleados dados de alta
     public void mostrarEmpleados(){
-        String sql = "SELECT * FROM empleados";
-        ResultSet rs = null;
+        sql = "SELECT * FROM empleados";
+        rs = null;
         try{
-            Statement st = connect.createStatement();              
-            rs = st.executeQuery(sql);
-            System.out.println("\nid\tnombre\tapellidos");
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            System.out.printf("%-20s%-20s%-20s\n","id","Nombre","Apellidos");
             while(rs.next()){
-                System.out.println("\n" + rs.getInt(1) + "\t" +
-                        rs.getString(2) + "\t" +
-                        rs.getString(3));
+                System.out.printf("%-20s%-20s%-20s\n",rs.getInt(1),rs.getString(2),rs.getString(3));
             }
         }catch (SQLException ex){
             System.err.println(ex.getMessage());
         }
     }
     
-    public void insertarCliente(){
-        String nombre,apellidos, email;
-                        
+    //Método ppara dar de alta un nuevo cliente
+    public void insertarCliente(){                                
         System.out.println("Teclee nombre del nuevo cliente:");
         nombre = teclado.nextLine();
         
@@ -394,72 +402,283 @@ public class Conector {
         System.out.println("Teclee mail:");
         email = teclado.nextLine(); 
                 
-        String sql = "INSERT INTO clientes (nombre, apellidos, email) values (?,?,?)";
+        sql = "INSERT INTO clientes (nombre, apellidos, email) values (?,?,?)";
         try{                     
-            PreparedStatement st = connect.prepareStatement(sql);
-            st.setString(1, nombre);
-            st.setString(2, apellidos);
-            st.setString(3, email);
-            st.execute();
+            pst = connect.prepareStatement(sql);
+            pst.setString(1, nombre);
+            pst.setString(2, apellidos);
+            pst.setString(3, email);
+            pst.execute();
+            System.out.println("Cliente creado...");
         } catch (SQLException ex){
             System.err.println(ex.getMessage());
-        } 
-        
+        }         
     }
     
+    //Método para mostrar los clientes dados de alta
     public void mostrarClientes(){
-        String sql = "SELECT * FROM clientes";
-        ResultSet rs = null;
+        sql = "SELECT * FROM clientes";
+        rs = null;
         try{
-            Statement st = connect.createStatement();              
-            rs = st.executeQuery(sql);
-            System.out.println("\nid\tnombre\tapellidos\tmail");
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            System.out.printf("%-20s%-20s%-20s%-20s\n","id","Nombre","Apellidos","Mail");
             while(rs.next()){
-                System.out.println("\n" + rs.getInt(1) + "\t" +
-                        rs.getString(2) + "\t" +
-                        rs.getString(3) + "\t" +
-                        rs.getString(4));
+                System.out.printf("%-20s%-20s%-20s%-20s\n",rs.getInt(1),rs.getString(2),rs.getString(3),rs.getString(4));                
             }
         }catch (SQLException ex){
             System.err.println(ex.getMessage());
         }
     }
-    
-    public void registrarHoras(){
-        int ide,in,ine;
-                
-        con.mostrarEmpleados();
-                    
-        System.out.println("Introduzca el id del empleado al que se le van a registrar las horas.");
+            
+    //Método para la eliminación de un cliente
+    public void eliminarCliente(){
+        System.out.println("Introduzca el id del cliente que quiere eliminar.");
         while(!teclado.hasNextInt()){
             System.out.println("Valor incorrecto, vuelva a intentarlo.");
         }
-        in = teclado.nextInt();
+        in = teclado.nextInt();                    
 
-        con.mostrarTiendas();
+        sql = "DELETE FROM clientes WHERE id ="+ in;
+        try{                     
+            pst = connect.prepareStatement(sql);
+            pst.execute();
+            System.out.println("Cliente eliminado...");
+        } catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }    
+    }
+    
+    //Método que saca por pantalla los titulares de "El País"
+    public void leerTitulares(){
+        XMLReader procesadorXML = null;
+        try {
 
-        System.out.println("Introduzca el id de la tienda a la que se van a computar las horas.");
+            //Creamos un parseador de texto e engadimoslle a nosa clase que vai parsear o texto
+            procesadorXML = XMLReaderFactory.createXMLReader();
+            TitularesXML titularesXML = new TitularesXML();
+            procesadorXML.setContentHandler(titularesXML);
+
+            //Indicamos o texto donde estan gardadas as persoas
+            InputSource arquivo = new InputSource("http://ep00.epimg.net/rss/elpais/portada.xml");
+            procesadorXML.parse(arquivo);
+
+            //Imprimimos os datos lidos no XML
+            ArrayList<Titular> titulares = titularesXML.getTitulares();
+            for(i=0;i<titulares.size();i++){
+                Titular tituloAux = titulares.get(i);
+                System.out.println("Titular: " + tituloAux.getTitular());
+            }
+
+        } catch (SAXException | IOException e) {
+            System.out.println("Ocurriu un erro ao ler o arquivo XML");
+        }
+        System.out.println("\nPresione cualquier tecla para salir de la sección noticias.");
+        teclado.next();
+    }
+    
+    //Método que nos permite eliminar un empleado
+    public void eliminarEmpleado(){
+        System.out.println("Introduzca el id del empleado que quiere eliminar.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        in = teclado.nextInt();                    
+
+        sql = "DELETE FROM empleados WHERE id="+ in;
+        try{                     
+            pst = connect.prepareStatement(sql);
+            pst.execute();
+            System.out.println("Empleado eliminado...");
+        } catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }    
+    }
+    
+    //Método para registrar las horas trabajadas por cada empleado, y en que tienda.
+    public void registrarHoras(){
+        mostrarEmpleados();
+                    
+        System.out.println("Introduzca el id del empleado al que quiere imputar horas.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        in = teclado.nextInt();     
+
+        System.out.println("Introduzca las horas a imputar.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        i = teclado.nextInt();     
+
+        mostrarTiendas();
+
+        System.out.println("Introduzca el id de la tienda en la que se han hecho esas horas.");
         while(!teclado.hasNextInt()){
             System.out.println("Valor incorrecto, vuelva a intentarlo.");
         }
         ide = teclado.nextInt();
 
-        System.out.println("Introduzca el número de horas a registrar.");
+        sql = "INSERT INTO horas (id_tienda, id_empleados, horas) values (?,?,?)";
+        try{                     
+            pst = connect.prepareStatement(sql);
+            pst.setInt(1, ide);
+            pst.setInt(2, in);
+            pst.setInt(3, i);
+            pst.execute();
+            System.out.println("Horas registradas...");
+        } catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        } 
+    }
+    
+    //Método para la eliminación de un producto, siempre y cuando su stock sea 0
+    public void eliminarProducto(){
+        System.out.println("Introduzca el id del producto que quiere eliminar.");
         while(!teclado.hasNextInt()){
             System.out.println("Valor incorrecto, vuelva a intentarlo.");
         }
-        ine = teclado.nextInt();
-        
-        String sql = "INSERT INTO horas (id_tienda, id_empleado, horas) values (?,?,?)";
+        in = teclado.nextInt();
+
+        sql = "SELECT sum(e.stock) FROM existencias e WHERE e.id_producto="+ in;
+
+        try{
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            while(rs.next()){
+                if(rs.getInt(1) == 0){                                
+                    sql = "DELETE FROM productos WHERE id ="+ in;
+                    try{                     
+                        pst = connect.prepareStatement(sql);
+                        pst.execute();
+                        System.out.println("Producto eliminado...");
+                    } catch (SQLException ex){
+                        System.err.println(ex.getMessage());
+                    }                
+                    }else{
+                        System.out.println("No se puede eliminar ese producto, todavía hay stock.");
+                    }                                
+                }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }   
+    }
+    
+    //Método que nos permite eliminar un producto de una tienda en concreto, siempre que su stock sea 0
+    public void eliminarProductoTienda(){
+        System.out.println("Introduzca el id de la tienda de la que quiere consultar el stock.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        ide = teclado.nextInt();
+
+        sql = "SELECT e.id_tienda,p.nombre,e.stock FROM existencias e INNER JOIN productos p ON p.id = e.id_producto WHERE e.id_tienda="+ide;
+
+        try{
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            System.out.printf("%-20s%-20s%-20s\n","id","Producto","Stock");  
+            while(rs.next()){
+                System.out.printf("%-20s%-20s%-20s\n",rs.getInt(1),rs.getString(2),rs.getInt(3));                  
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }   
+
+        System.out.println("Introduzca el id del producto que quiere eliminar.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        in = teclado.nextInt();
+
+        sql = "SELECT stock FROM existencias WHERE id_tienda ='"+ in +"'";
+
+        try{
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);                        
+            while(rs.next()){
+                if(rs.getInt(1) == 0){
+                    sql = "DELETE FROM existencias WHERE id_tienda ="+ in;
+                    try{                     
+                        pst = connect.prepareStatement(sql);
+                        pst.execute();
+                        System.out.println("Producto eliminado de la tienda...");
+                    } catch (SQLException ex){
+                        System.err.println(ex.getMessage());
+                    }                
+                }else{
+                    System.out.println("No se puede eliminar ese producto, todavía hay stock.");
+                }
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }   
+    }
+    
+    //Método para consultar el stock de una tienda en concreto
+    public void consultarStock(){
+        System.out.println("Introduzca el id de la tienda de la que quiere consultar el stock.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        ide = teclado.nextInt();
+
+        sql = "SELECT p.nombre,e.stock FROM existencias e INNER JOIN productos p ON p.id = e.id_producto WHERE "+ ide +"=e.id_tienda";
+
+        try{
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            System.out.printf("%-20s%-20s\n","Producto","Stock");
+            while(rs.next()){
+                System.out.printf("%-20s%-20s\n",rs.getString(1),rs.getInt(2));                
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }                 
+    }
+    
+    //Método que nos permite moidificar el stock de un producto en una tienda
+    public void actualizarStock(){
+        System.out.println("Introduzca el id del producto del que quiere actualizar stock.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        ide = teclado.nextInt();
+
+        System.out.println("Introduzca el nuevo stock del producto.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        in = teclado.nextInt();
+
+        sql = "UPDATE existencias SET stock = '"+ in + "' WHERE id_tienda = '" + ide + "'";
         try{                     
-            PreparedStatement st = connect.prepareStatement(sql);
-            st.setInt(1, in);
-            st.setInt(2, ide);
-            st.setInt(3, ine);  
-            st.execute();
+            pst = connect.prepareStatement(sql);
+            pst.execute();
         } catch (SQLException ex){
             System.err.println(ex.getMessage());
-        }                
+        }          
+    }
+    
+    //Método que nos permite ver que productos hay en una tienda
+    public void consultarProductosTienda(){
+        System.out.println("Introduzca el id de la tienda de la que quiere consultar los productos.");
+        while(!teclado.hasNextInt()){
+            System.out.println("Valor incorrecto, vuelva a intentarlo.");
+        }
+        ide = teclado.nextInt();
+
+        sql = "SELECT * FROM existencias WHERE id_tienda = '" + ide + "'";
+        try{
+            System.out.printf("%-20s%-20s%-20s\n","id_tienda","id_producto","Stock\n");    
+            stm = connect.createStatement();              
+            rs = stm.executeQuery(sql);
+            while(rs.next()){
+                System.out.printf("%-20s%-20s%-20s\n",rs.getInt(1),rs.getInt(2),rs.getInt(3) + "\n");                
+            }
+        }catch (SQLException ex){
+            System.err.println(ex.getMessage());
+        }
     }
         
 }
